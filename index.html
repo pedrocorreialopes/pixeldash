@@ -1,0 +1,507 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Arcade Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #120038;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(to bottom, #120038, #3b0764);
+        }
+        
+        .player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #ff0080;
+            border-radius: 5px;
+            transition: transform 0.1s;
+        }
+        
+        .enemy {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #00ff9d;
+            border-radius: 50%;
+        }
+        
+        .coin {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #ffdd00;
+            border-radius: 50%;
+            animation: pulse 1s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { transform: scale(1); box-shadow: 0 0 5px #ffdd00; }
+            to { transform: scale(1.1); box-shadow: 0 0 15px #ffdd00; }
+        }
+        
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #ff0080;
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 100;
+        }
+        
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+        }
+        
+        .btn {
+            background-color: #ff0080;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            margin-top: 2rem;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px #ff0080;
+        }
+        
+        .score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 1.2rem;
+            z-index: 10;
+        }
+        
+        .lives-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 1.2rem;
+            z-index: 10;
+        }
+        
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score-display">SCORE: <span id="score">0</span></div>
+        <div class="lives-display">LIVES: <span id="lives">3</span></div>
+        
+        <div class="start-screen" id="startScreen">
+            <h1 class="text-4xl text-white mb-4">PIXEL DASH</h1>
+            <p class="text-white mb-8">Collect coins, avoid enemies!</p>
+            <button class="btn" id="startButton">START GAME</button>
+            <p class="text-white mt-8 text-sm">Use arrow keys or WASD to move</p>
+        </div>
+        
+        <div class="game-over" id="gameOverScreen">
+            <h2 class="text-2xl mb-4">GAME OVER</h2>
+            <p class="mb-4">Final Score: <span id="finalScore">0</span></p>
+            <button class="btn" id="restartButton">PLAY AGAIN</button>
+        </div>
+        
+        <div class="player" id="player"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const gameContainer = document.querySelector('.game-container');
+            const player = document.getElementById('player');
+            const scoreElement = document.getElementById('score');
+            const livesElement = document.getElementById('lives');
+            const startScreen = document.getElementById('startScreen');
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            const startButton = document.getElementById('startButton');
+            const restartButton = document.getElementById('restartButton');
+            const finalScoreElement = document.getElementById('finalScore');
+            
+            let gameActive = false;
+            let playerX = 0;
+            let playerY = 0;
+            let playerSpeed = 5;
+            let score = 0;
+            let lives = 3;
+            let enemies = [];
+            let coins = [];
+            let enemySpeed = 2;
+            let enemySpawnRate = 2000;
+            let coinSpawnRate = 1500;
+            let enemySpawnInterval;
+            let coinSpawnInterval;
+            let gameLoopInterval;
+            
+            // Create stars for background
+            function createStars() {
+                for (let i = 0; i < 100; i++) {
+                    const star = document.createElement('div');
+                    star.classList.add('star');
+                    
+                    const size = Math.random() * 3;
+                    star.style.width = `${size}px`;
+                    star.style.height = `${size}px`;
+                    
+                    const opacity = Math.random();
+                    star.style.opacity = opacity;
+                    
+                    const x = Math.random() * 100;
+                    const y = Math.random() * 100;
+                    star.style.left = `${x}%`;
+                    star.style.top = `${y}%`;
+                    
+                    gameContainer.appendChild(star);
+                    
+                    // Add twinkling animation
+                    setInterval(() => {
+                        star.style.opacity = Math.random();
+                    }, Math.random() * 5000 + 1000);
+                }
+            }
+            
+            function startGame() {
+                resetGame();
+                gameActive = true;
+                startScreen.style.display = 'none';
+                
+                // Center player at start
+                const containerRect = gameContainer.getBoundingClientRect();
+                playerX = containerRect.width / 2 - 20;
+                playerY = containerRect.height / 2 - 20;
+                updatePlayerPosition();
+                
+                // Start game loops
+                enemySpawnInterval = setInterval(spawnEnemy, enemySpawnRate);
+                coinSpawnInterval = setInterval(spawnCoin, coinSpawnRate);
+                gameLoopInterval = setInterval(gameLoop, 16);
+            }
+            
+            function resetGame() {
+                score = 0;
+                lives = 3;
+                scoreElement.textContent = score;
+                livesElement.textContent = lives;
+                
+                // Remove all enemies and coins
+                enemies.forEach(enemy => enemy.element.remove());
+                coins.forEach(coin => coin.element.remove());
+                enemies = [];
+                coins = [];
+                
+                enemySpeed = 2;
+                enemySpawnRate = 2000;
+            }
+            
+            function gameLoop() {
+                moveEnemies();
+                checkCollisions();
+            }
+            
+            function spawnEnemy() {
+                if (!gameActive) return;
+                
+                const enemy = document.createElement('div');
+                enemy.classList.add('enemy');
+                gameContainer.appendChild(enemy);
+                
+                const containerRect = gameContainer.getBoundingClientRect();
+                
+                // Determine spawn position (from edges)
+                let x, y, dirX, dirY;
+                const side = Math.floor(Math.random() * 4);
+                
+                switch(side) {
+                    case 0: // Top
+                        x = Math.random() * containerRect.width;
+                        y = -30;
+                        dirX = Math.random() * 2 - 1;
+                        dirY = Math.random() * 0.5 + 0.5;
+                        break;
+                    case 1: // Right
+                        x = containerRect.width + 30;
+                        y = Math.random() * containerRect.height;
+                        dirX = -(Math.random() * 0.5 + 0.5);
+                        dirY = Math.random() * 2 - 1;
+                        break;
+                    case 2: // Bottom
+                        x = Math.random() * containerRect.width;
+                        y = containerRect.height + 30;
+                        dirX = Math.random() * 2 - 1;
+                        dirY = -(Math.random() * 0.5 + 0.5);
+                        break;
+                    case 3: // Left
+                        x = -30;
+                        y = Math.random() * containerRect.height;
+                        dirX = Math.random() * 0.5 + 0.5;
+                        dirY = Math.random() * 2 - 1;
+                        break;
+                }
+                
+                // Normalize direction vector
+                const length = Math.sqrt(dirX * dirX + dirY * dirY);
+                dirX = dirX / length;
+                dirY = dirY / length;
+                
+                enemy.style.left = `${x}px`;
+                enemy.style.top = `${y}px`;
+                
+                enemies.push({
+                    element: enemy,
+                    x: x,
+                    y: y,
+                    dirX: dirX,
+                    dirY: dirY
+                });
+            }
+            
+            function spawnCoin() {
+                if (!gameActive) return;
+                
+                const coin = document.createElement('div');
+                coin.classList.add('coin');
+                gameContainer.appendChild(coin);
+                
+                const containerRect = gameContainer.getBoundingClientRect();
+                const x = Math.random() * (containerRect.width - 20);
+                const y = Math.random() * (containerRect.height - 20);
+                
+                coin.style.left = `${x}px`;
+                coin.style.top = `${y}px`;
+                
+                coins.push({
+                    element: coin,
+                    x: x,
+                    y: y
+                });
+                
+                // Auto-remove coin after 10 seconds
+                setTimeout(() => {
+                    if (coins.includes(coin)) {
+                        const index = coins.indexOf(coin);
+                        if (index > -1) {
+                            coins.splice(index, 1);
+                            coin.element.remove();
+                        }
+                    }
+                }, 10000);
+            }
+            
+            function moveEnemies() {
+                const containerRect = gameContainer.getBoundingClientRect();
+                
+                enemies.forEach((enemy, index) => {
+                    enemy.x += enemy.dirX * enemySpeed;
+                    enemy.y += enemy.dirY * enemySpeed;
+                    
+                    enemy.element.style.left = `${enemy.x}px`;
+                    enemy.element.style.top = `${enemy.y}px`;
+                    
+                    // Remove enemies that are off-screen
+                    if (enemy.x < -50 || enemy.x > containerRect.width + 50 || 
+                        enemy.y < -50 || enemy.y > containerRect.height + 50) {
+                        enemy.element.remove();
+                        enemies.splice(index, 1);
+                    }
+                });
+            }
+            
+            function checkCollisions() {
+                const playerRect = player.getBoundingClientRect();
+                
+                // Check enemy collisions
+                enemies.forEach((enemy, index) => {
+                    const enemyRect = enemy.element.getBoundingClientRect();
+                    
+                    if (isColliding(playerRect, enemyRect)) {
+                        // Player hit by enemy
+                        enemy.element.remove();
+                        enemies.splice(index, 1);
+                        
+                        lives--;
+                        livesElement.textContent = lives;
+                        
+                        if (lives <= 0) {
+                            gameOver();
+                        } else {
+                            // Flash player to indicate damage
+                            player.style.backgroundColor = 'white';
+                            setTimeout(() => {
+                                player.style.backgroundColor = '#ff0080';
+                            }, 200);
+                        }
+                    }
+                });
+                
+                // Check coin collisions
+                coins.forEach((coin, index) => {
+                    const coinRect = coin.element.getBoundingClientRect();
+                    
+                    if (isColliding(playerRect, coinRect)) {
+                        // Player collected coin
+                        coin.element.remove();
+                        coins.splice(index, 1);
+                        
+                        score += 10;
+                        scoreElement.textContent = score;
+                        
+                        // Increase difficulty every 50 points
+                        if (score % 50 === 0) {
+                            enemySpeed += 0.5;
+                            if (enemySpawnRate > 500) {
+                                enemySpawnRate -= 200;
+                                clearInterval(enemySpawnInterval);
+                                enemySpawnInterval = setInterval(spawnEnemy, enemySpawnRate);
+                            }
+                        }
+                    }
+                });
+            }
+            
+            function isColliding(rect1, rect2) {
+                return !(
+                    rect1.right < rect2.left || 
+                    rect1.left > rect2.right || 
+                    rect1.bottom < rect2.top || 
+                    rect1.top > rect2.bottom
+                );
+            }
+            
+            function gameOver() {
+                gameActive = false;
+                clearInterval(enemySpawnInterval);
+                clearInterval(coinSpawnInterval);
+                clearInterval(gameLoopInterval);
+                
+                finalScoreElement.textContent = score;
+                gameOverScreen.style.display = 'block';
+            }
+            
+            function updatePlayerPosition() {
+                const containerRect = gameContainer.getBoundingClientRect();
+                
+                // Keep player within bounds
+                playerX = Math.max(0, Math.min(containerRect.width - 40, playerX));
+                playerY = Math.max(0, Math.min(containerRect.height - 40, playerY));
+                
+                player.style.left = `${playerX}px`;
+                player.style.top = `${playerY}px`;
+            }
+            
+            // Controls
+            const keys = {
+                ArrowUp: false,
+                ArrowDown: false,
+                ArrowLeft: false,
+                ArrowRight: false,
+                w: false,
+                a: false,
+                s: false,
+                d: false
+            };
+            
+            document.addEventListener('keydown', (e) => {
+                if (keys.hasOwnProperty(e.key)) {
+                    keys[e.key] = true;
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (keys.hasOwnProperty(e.key)) {
+                    keys[e.key] = false;
+                }
+            });
+            
+            // Mobile controls
+            let touchStartX = 0;
+            let touchStartY = 0;
+            
+            gameContainer.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            });
+            
+            gameContainer.addEventListener('touchmove', (e) => {
+                if (!gameActive) return;
+                
+                e.preventDefault();
+                const touchX = e.touches[0].clientX;
+                const touchY = e.touches[0].clientY;
+                
+                playerX += (touchX - touchStartX) * 0.5;
+                playerY += (touchY - touchStartY) * 0.5;
+                
+                touchStartX = touchX;
+                touchStartY = touchY;
+                
+                updatePlayerPosition();
+            });
+            
+            // Game animation loop
+            function animate() {
+                if (gameActive) {
+                    if (keys.ArrowUp || keys.w) playerY -= playerSpeed;
+                    if (keys.ArrowDown || keys.s) playerY += playerSpeed;
+                    if (keys.ArrowLeft || keys.a) playerX -= playerSpeed;
+                    if (keys.ArrowRight || keys.d) playerX += playerSpeed;
+                    
+                    updatePlayerPosition();
+                }
+                
+                requestAnimationFrame(animate);
+            }
+            
+            // Event listeners
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', () => {
+                gameOverScreen.style.display = 'none';
+                startGame();
+            });
+            
+            // Initialize
+            createStars();
+            animate();
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9538342d32b82d4c',t:'MTc1MDU1ODE2OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
